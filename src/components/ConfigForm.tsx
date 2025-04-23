@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, TextInput, Button, StyleSheet } from 'react-native';
+import { View, TextInput, Button, StyleSheet, TouchableOpacity, Text } from 'react-native';
 import globalStyles from '../styles/styles';
 
 interface ConfigFormProps {
@@ -28,6 +28,7 @@ const ConfigForm: React.FC<ConfigFormProps> = ({
         placeholder="WiFi SSID"
         value={ssid}
         onChangeText={setSsid}
+        placeholderTextColor="#888"
       />
       <TextInput
         style={globalStyles.input}
@@ -35,14 +36,18 @@ const ConfigForm: React.FC<ConfigFormProps> = ({
         value={password}
         onChangeText={setPassword}
         secureTextEntry
+        placeholderTextColor="#888"
       />
       <TextInput
         style={globalStyles.input}
         placeholder="Security ID"
         value={securityId}
         onChangeText={setSecurityId}
+        placeholderTextColor="#888"
       />
-      <Button title="Submit" onPress={onSubmit} />
+      <TouchableOpacity onPress={onSubmit} style={styles.SubmitBut}>
+        <Text style={styles.buttonText}>Submit</Text>
+      </TouchableOpacity>
     </View>
   );
 };
@@ -51,8 +56,19 @@ const styles = StyleSheet.create({
   form: {
     marginBottom: 50,
     marginTop: 10,
-    padding:"2%",
-    backgroundColor: "wheat",
+    padding: "2%",
+    backgroundColor: "#F0F0F0",
+    borderRadius: 15
+  },
+  SubmitBut: {
+    backgroundColor: '#3e9b3d',
+    padding: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  buttonText: {
+    color: '#fff',
+    fontWeight: 'bold',
   },
 });
 

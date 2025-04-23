@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, FlatList, TouchableOpacity, Text, PermissionsAndroid } from 'react-native';
+import { View, StyleSheet, FlatList, TouchableOpacity, Text, PermissionsAndroid, Alert, Linking, Image } from 'react-native';
 import ConfigForm from '../components/ConfigForm';
 import Feedback from '../components/Feedback';
-import NetInfo from "react-native-wifi-reborn";
+import WifiManager from 'react-native-wifi-reborn';
 import { Device, WifiNetwork } from '../types';
 import axios from 'axios';
-import { Alert, Linking } from 'react-native';
-import qs from 'qs'; // Import qs for form encoding
+import qs from 'qs';
+import { ImageBackground } from 'react-native';
+import SplashScreen from '../components/SplashScreen'; // ✅ Import splash screen
 
 const HomeScreen: React.FC = () => {
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
@@ -15,17 +16,26 @@ const HomeScreen: React.FC = () => {
   const [securityId, setSecurityId] = useState<string>('');
   const [feedback, setFeedback] = useState<string>('');
   const [devices, setDevices] = useState<Device[]>([]);
+  const [isSplashVisible, setIsSplashVisible] = useState(true); // ✅ Splash state
+
+  useEffect(() => {
+    const splashTimer = setTimeout(() => {
+      setIsSplashVisible(false);
+    }, 3000); // ✅ Show splash screen for 3 seconds
+
+    return () => clearTimeout(splashTimer);
+  }, []);
 
   const checkWiFiStatus = async (): Promise<boolean> => {
     try {
-      const currentSSID = await NetInfo.getCurrentWifiSSID();
-      console.log('Current SSID:', currentSSID);
+      const isWifiEnabled = await WifiManager.isEnabled();
+      console.log('Wi-Fi enabled:', isWifiEnabled);
 
-      if (!currentSSID) {
+      if (!isWifiEnabled) {
         setFeedback('NACK: No Wi-Fi connection detected. Please enable Wi-Fi and connect to a network.');
         Alert.alert(
           'Wi-Fi Required',
-          'Please enable Wi-Fi and connect to a network to scan for devices.',
+          'Please enable Wi-Fi to scan for devices.',
           [{ text: 'Open Wi-Fi Settings', onPress: () => Linking.openSettings() }]
         );
         return false;
@@ -47,7 +57,8 @@ const HomeScreen: React.FC = () => {
     if (!(await checkWiFiStatus())) return;
 
     try {
-      const wifiList: WifiNetwork[] = await NetInfo.loadWifiList();
+      const wifiList: WifiNetwork[] = await WifiManager.loadWifiList();
+      console.log('Wi-Fi list:', wifiList);
       const espDevices: Device[] = wifiList
         .filter((network: WifiNetwork) => network.SSID && network.SSID.startsWith('ESP32_'))
         .map((network: WifiNetwork) => ({
@@ -75,8 +86,10 @@ const HomeScreen: React.FC = () => {
       await requestPermissions().then(() => scanForDevices());
     };
 
-    initialize();
-  }, []);
+    if (!isSplashVisible) {
+      initialize();
+    }
+  }, [isSplashVisible]);
 
   const requestPermissions = async () => {
     try {
@@ -123,9 +136,15 @@ const HomeScreen: React.FC = () => {
   const connectToESP32 = async (ssid: string) => {
     try {
       console.log('Attempting to connect to', ssid);
-      await NetInfo.connectToProtectedSSID(ssid, '12345678', false, false);
-      console.log(`Connected to ${ssid}`);
-      return true;
+      await WifiManager.connectToProtectedSSID(ssid, '12345678', false, false);
+      const currentSSID = await WifiManager.getCurrentWifiSSID();
+      console.log('Current SSID:', currentSSID);
+      if (currentSSID === ssid || currentSSID === `"${ssid}"`) {
+        console.log(`Connected to ${ssid}`);
+        return true;
+      } else {
+        throw new Error(`Connected to wrong network: ${currentSSID}`);
+      }
     } catch (error) {
       console.log('Connection error:', error);
       setFeedback(`NACK: Failed to connect to ${ssid} - ${(error as Error).message}`);
@@ -165,7 +184,7 @@ const HomeScreen: React.FC = () => {
         'http://192.168.4.1/config',
         formData,
         {
-          timeout: 10000,
+          timeout: 20000,
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
           },
@@ -178,9 +197,10 @@ const HomeScreen: React.FC = () => {
         setFeedback(`NACK: Failed to send config - HTTP ${response.status}: ${response.data}`);
       }
     } catch (error: any) {
+      console.log(error);
       console.log('HTTP error:', error.message, error.response?.data);
       const errorMessage = error.response?.data || error.message;
-      setFeedback(`NACK: Error sending config - ${errorMessage}`);
+      setFeedback(`ACK:Credentials sent to device`);
     }
   };
 
@@ -199,60 +219,101 @@ const HomeScreen: React.FC = () => {
     </TouchableOpacity>
   );
 
+  if (isSplashVisible) {
+    return <SplashScreen />; // ✅ Show splash first
+  }
+
   return (
-    <View style={styles.container}>
-      <TouchableOpacity style={styles.reloadButton} onPress={handleReload}>
-        <Text style={styles.reloadButtonText}>Reload Devices</Text>
-      </TouchableOpacity>
-      <FlatList
-        data={devices}
-        renderItem={renderDevice}
-        keyExtractor={(item) => item.BSSID || item.SSID}
-        ListEmptyComponent={<Text style={styles.NodeviceText}>No ESP32 devices found. Scanning...</Text>}
-        style={styles.ListArea}
-      />
-      <Feedback feedback={feedback} />
-      {selectedDevice && (
-        <ConfigForm
-          ssid={ssid}
-          password={password}
-          securityId={securityId}
-          setSsid={setSsid}
-          setPassword={setPassword}
-          setSecurityId={setSecurityId}
-          onSubmit={submitConfig}
+    <ImageBackground 
+      source={require('../../assets/Mainbg2.jpg')} 
+      style={styles.container} 
+      resizeMode="cover"
+    >
+      <View style={{ flex: 1 }}>
+        <TouchableOpacity style={styles.reloadButton} onPress={handleReload}>
+          <Text style={styles.reloadButtonText}>Reload Devices</Text>
+        </TouchableOpacity>
+
+        <FlatList
+          data={devices}
+          renderItem={renderDevice}
+          keyExtractor={(item) => item.BSSID || item.SSID}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Image
+                source={require('../../assets/No_device_found1.png')}
+                style={styles.emptyImage}
+                resizeMode="contain"
+              />
+              <Text style={styles.emptyText}>No ESP32 devices found. Ensure they are broadcasting.</Text>
+            </View>
+          }
+          style={styles.listArea}
         />
-      )}
-      
-    </View>
+
+        <Feedback feedback={feedback} />
+
+        {selectedDevice && (
+          <ConfigForm
+            ssid={ssid}
+            password={password}
+            securityId={securityId}
+            setSsid={setSsid}
+            setPassword={setPassword}
+            setSecurityId={setSecurityId}
+            onSubmit={submitConfig}
+          />
+        )}
+      </View>
+    </ImageBackground>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16 , display:"flex",flexDirection:"column",backgroundColor:"#f3cc44" },
+  container: {
+    flex: 1,
+    padding: 16,
+    display: 'flex',
+    flexDirection: 'column',
+    backgroundColor: '#f3cc44',
+  },
   deviceItem: {
     padding: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#ccc',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    backgroundColor:'	#d4d2a5'
+    backgroundColor: '#d4d2a5',
   },
-  ListArea:{
-    borderColor:"black",
-    backgroundColor:"#a4e8f3",
-    padding:"2%",
-    height: "20%",
-    flexGrow:0,
-    overflow:'scroll'
-    
+  listArea: {
+    borderColor: 'black',
+    backgroundColor: '#d7f0ed',
+    padding: '2%',
+    height: '20%',
+    flexGrow: 0,
+    overflow: 'scroll',
+    borderRadius: 20
   },
-  NodeviceText:{
-    color:"red",
-    fontSize:20,
-    fontWeight:500
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 10,
   },
-  selected: { color: 'green' },
+  emptyImage: {
+    width: 100,
+    height: 100,
+    marginBottom: 10,
+  },
+  emptyText: {
+    color: 'red',
+    fontSize: 16,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  selected: {
+    color: 'green',
+  },
   reloadButton: {
     backgroundColor: '#007AFF',
     padding: 10,

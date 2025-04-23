@@ -8,14 +8,13 @@ const globalStyles = StyleSheet.create({
     marginBottom: 10,
     paddingHorizontal: 10,
     color: "black",
-    
   },
   feedback: {
     fontSize: 20,
-    padding:"1%",
+    padding:"1.2%",
     textAlign: 'center',
     backgroundColor: "#f3b644",
-    
+    borderRadius: 20
   },
 });
 
